@@ -1,6 +1,10 @@
 package com.perflyst.twire.activities.stream;
 
+import android.annotation.TargetApi;
+import android.app.PictureInPictureParams;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -18,6 +22,7 @@ import android.view.View;
 import com.perflyst.twire.R;
 import com.perflyst.twire.activities.ThemeActivity;
 import com.perflyst.twire.fragments.StreamFragment;
+import com.perflyst.twire.misc.TaskManager;
 
 public abstract class StreamActivity extends ThemeActivity implements SensorEventListener {
 	private static final int SENSOR_DELAY = 500 * 1000; // 500ms
@@ -26,6 +31,9 @@ public abstract class StreamActivity extends ThemeActivity implements SensorEven
 	private String LOG_TAG = getClass().getSimpleName();
 	private Sensor mRotationSensor;
 	public StreamFragment mStreamFragment;
+
+	private PictureInPictureParams.Builder mPictureInPictureParamsBuilder;
+	private boolean beenInPictureInPicture = false;
 
 	protected abstract int getLayoutRessource();
 	protected abstract int getVideoContainerRessource();
@@ -41,6 +49,10 @@ public abstract class StreamActivity extends ThemeActivity implements SensorEven
 		if (Build.VERSION.SDK_INT >= 21) {
 			getWindow().setNavigationBarColor(ContextCompat.getColor(this, R.color.black));
 			getWindow().setStatusBarColor(ContextCompat.getColor(this, R.color.black));
+		}
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			mPictureInPictureParamsBuilder = new PictureInPictureParams.Builder();
 		}
 
 		if(savedInstanceState == null) {
@@ -128,6 +140,12 @@ public abstract class StreamActivity extends ThemeActivity implements SensorEven
 
 	@Override
 	public void onBackPressed() {
+
+		// Removes the preview stuck after exiting from coming back from PiP
+		if (beenInPictureInPicture) {
+			finish();
+		}
+
 		// Eww >(
 		if (mStreamFragment != null) {
 			if(mStreamFragment.isFullscreen) {
@@ -195,5 +213,41 @@ public abstract class StreamActivity extends ThemeActivity implements SensorEven
 
 	public View getMainContentLayout() {
 		return findViewById(R.id.main_content);
+	}
+
+	@Override
+	public void onNewIntent(Intent intent) {
+		super.onNewIntent(intent);
+		setIntent(intent);
+		mStreamFragment.updateStream(getStreamArguments());
+	}
+
+	@TargetApi(Build.VERSION_CODES.O)
+	public void setupPictureInPicture() {
+		beenInPictureInPicture = true;
+		mStreamFragment.disableUI();
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onUserLeaveHint() {
+		PictureInPictureParams params = mPictureInPictureParamsBuilder
+				.setAspectRatio(mStreamFragment.getAspectRatio())
+				.build();
+		setupPictureInPicture();
+		enterPictureInPictureMode(params);
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration config) {
+		if (!isInPictureInPictureMode) {
+			// Show UI Stuff
+			mStreamFragment.enableUI();
+
+			// Restore previous activity
+			TaskManager tm  = new TaskManager();
+			tm.navToLauncherTask(getApplicationContext());
+		}
 	}
 }

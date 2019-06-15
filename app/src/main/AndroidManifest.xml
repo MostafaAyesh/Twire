@@ -51,9 +51,14 @@
 
         <activity
             android:name="com.perflyst.twire.activities.stream.LiveStreamActivity"
+            android:supportsPictureInPicture="true"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:label="@string/title_activity_live_stream"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
+            android:allowTaskReparenting="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:autoRemoveFromRecents="true"
             android:screenOrientation="sensor">
         </activity>
         <activity

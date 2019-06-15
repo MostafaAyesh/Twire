@@ -31,6 +31,8 @@ public class VideoViewSimple extends VideoView {
 	@Override
 	protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
 		super.onLayout(changed, left, top, right, bottom);
-		getHolder().setSizeFromLayout();
+		// Causes the PiP to flicker
+		// getHolder().setSizeFromLayout();
 	}
+
 }

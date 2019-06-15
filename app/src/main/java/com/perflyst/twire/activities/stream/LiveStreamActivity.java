@@ -1,5 +1,6 @@
 package com.perflyst.twire.activities.stream;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -25,6 +26,7 @@ import com.perflyst.twire.R;
 import com.perflyst.twire.adapters.MentionAdapter;
 import com.perflyst.twire.fragments.ChatFragment;
 import com.perflyst.twire.fragments.StreamFragment;
+import com.perflyst.twire.misc.ResizeHeightAnimation;
 import com.perflyst.twire.model.ChannelInfo;
 import com.perflyst.twire.model.StreamInfo;
 import com.perflyst.twire.service.Settings;
@@ -219,6 +221,40 @@ public class LiveStreamActivity extends StreamActivity {
 		});
 		mMentionRecyclerView.setLayoutManager(new LinearLayoutManager(this));
 		mMentionRecyclerView.setAdapter(mMentionAdapter);
+	}
+
+	@Override
+	public void onNewIntent(Intent intent) {
+		super.onNewIntent(intent);
+
+		/* Update Chat */
+		FragmentManager fm = getSupportFragmentManager();
+		mChatFragment = ChatFragment.getInstance(getStreamArguments());
+		fm.beginTransaction().replace(R.id.chat_fragment, mChatFragment).commit();
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void setupPictureInPicture() {
+		super.setupPictureInPicture();
+		View chat = findViewById(R.id.chat_fragment);
+		chat.setVisibility(View.GONE);
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onUserLeaveHint() {
+		super.onUserLeaveHint();
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration config) {
+		super.onPictureInPictureModeChanged(isInPictureInPictureMode, config);
+		if (!isInPictureInPictureMode) {
+			View chat = findViewById(R.id.chat_fragment);
+			chat.setVisibility(View.VISIBLE);
+		}
 	}
 }
 

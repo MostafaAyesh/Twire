@@ -1,5 +1,7 @@
 package com.perflyst.twire.fragments;
 
+import android.animation.ValueAnimator;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -33,12 +35,14 @@ import androidx.appcompat.widget.Toolbar;
 import android.transition.Transition;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Rational;
 import android.view.Display;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -111,7 +115,7 @@ public class StreamFragment extends Fragment {
     private SleepTimer sleepTimer;
     private HashMap<String, String> qualityURLs;
     private BiMap<String, String> supportedQualities;
-    private boolean isLandscape = false, previewInbackGround = false;
+    private boolean isLandscape = false, previewInbackGround = false, isInPictureinPicture = false;
     private Runnable fetchViewCountRunnable;
     private Runnable fetchChattersRunnable;
 
@@ -464,7 +468,10 @@ public class StreamFragment extends Fragment {
             isLandscape = false;
         }
 
-        checkShowChatButtonVisibility();
+        // Hide chat button when going into PiP from Landscape
+        if (!isInPictureinPicture) {
+            checkShowChatButtonVisibility();
+        }
         updateUI();
     }
 
@@ -485,8 +492,11 @@ public class StreamFragment extends Fragment {
         registerAudioOnlyDelegate();
 
         if (!chatOnlyViewVisible) {
-            showVideoInterface();
-            updateUI();
+            if (!isInPictureinPicture) {
+                showVideoInterface();
+                updateUI();
+            }
+
         }
     }
 
@@ -528,6 +538,7 @@ public class StreamFragment extends Fragment {
         }
 
         progressHandler.removeCallbacks(progressRunnable);
+
         super.onDestroy();
     }
 
@@ -957,7 +968,8 @@ public class StreamFragment extends Fragment {
         }
 
         View decorView = getActivity().getWindow().getDecorView();
-        if (isLandscape || isFullscreen) {
+
+        if (isLandscape) {
             Log.d(LOG_TAG, "Hiding navigation");
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -1866,4 +1878,172 @@ public class StreamFragment extends Fragment {
             }
         }
     }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    public Rational getAspectRatio() {
+        // Calculate the aspect ratio of the PiP screen.
+        Rational aspectRatio = new Rational(mVideoView.getWidth(), mVideoView.getHeight());
+        return aspectRatio;
+    }
+
+    /**
+     * Hide Video UI when entering PiP
+     */
+    public void disableUI(){
+        isInPictureinPicture = true;
+
+        // Force NavBar to show
+        View decorView = getActivity().getWindow().getDecorView();
+        decorView.setSystemUiVisibility(0); // Remove all flags.
+
+        if (!isLandscape) {
+            RelativeLayout.LayoutParams lParams = (RelativeLayout.LayoutParams) mVideoView.getLayoutParams();
+            lParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+            lParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            mVideoView.setLayoutParams(lParams);
+        } else {
+            RelativeLayout.LayoutParams lParams = (RelativeLayout.LayoutParams) mVideoView.getLayoutParams();
+            lParams.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+            lParams.addRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+            mVideoView.setLayoutParams(lParams);
+        }
+
+
+        ResizeHeightAnimation resizeHeightAnimation = new ResizeHeightAnimation(mVideoWrapper, getActivity().getWindow().getDecorView().getHeight());
+        resizeHeightAnimation.setDuration(150);
+        mVideoWrapper.startAnimation(resizeHeightAnimation);
+
+        mToolbar.setVisibility(View.INVISIBLE);
+        mControlToolbar.setVisibility(View.INVISIBLE);
+        mPlayPauseWrapper.setVisibility(View.INVISIBLE);
+        mShowChatButton.setVisibility(View.INVISIBLE);
+
+        mVideoWrapper.setOnClickListener(null);
+    }
+
+    /**
+     * Restore Video UI when leaving PiP
+     */
+    @TargetApi(Build.VERSION_CODES.O)
+    public void enableUI(){
+
+        RelativeLayout.LayoutParams lParams = (RelativeLayout.LayoutParams) mVideoView.getLayoutParams();
+        lParams.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
+        lParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        lParams.removeRule(RelativeLayout.ALIGN_PARENT_LEFT);
+        lParams.removeRule(RelativeLayout.ALIGN_PARENT_RIGHT);
+        mVideoView.setLayoutParams(lParams);
+
+        // Update screen rotation when leaving PiP
+        if (getActivity().getRequestedOrientation() == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+            getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        }
+
+        mToolbar.setVisibility(View.VISIBLE);
+        mControlToolbar.setVisibility(View.VISIBLE);
+        mPlayPauseWrapper.setVisibility(View.VISIBLE);
+        checkShowChatButtonVisibility();
+        mVideoWrapper.setOnClickListener(v -> {
+            delayAnimationHandler.removeCallbacks(hideAnimationRunnable);
+            if (isVideoInterfaceShowing()) {
+                hideVideoInterface();
+                if (isDeviceBelowKitkat())
+                    setAndroidUiMode();
+            } else {
+                showVideoInterface();
+
+                isLandscape = (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
+
+                View decorView = getActivity().getWindow().getDecorView();
+                // Show the navigation bar
+                if (isLandscape && settings.getStreamPlayerShowNavigationBar() && Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
+                    decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN // Hide Status bar
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE);
+                }
+                else {
+                    decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+                }
+
+                if (mVideoView.isPlaying()) {
+                    delayHiding();
+                }
+
+                Handler h = new Handler();
+                h.postDelayed(() -> setAndroidUiMode(), HIDE_ANIMATION_DELAY);
+            }
+        });
+
+        // Force NavBar to show
+        View decorView = getActivity().getWindow().getDecorView();
+        decorView.setSystemUiVisibility(0); // Remove all flags.
+        isInPictureinPicture = false;
+    }
+
+    public void updateViewerCount(Bundle args) {
+        if (args != null && args.containsKey(getString(R.string.stream_fragment_viewers)) && settings.getStreamPlayerShowViewerCount()) {
+            mCurrentViewersView.setText("" + args.getInt(getString(R.string.stream_fragment_viewers)));
+            startFetchingViewers();
+        }
+    }
+
+    public void updatePreview() {
+        final Intent intent = getActivity().getIntent();
+        if (intent.hasExtra(getString(R.string.stream_preview_url))) {
+            String imageUrl = intent.getStringExtra(getString(R.string.stream_preview_url));
+
+            if (imageUrl == null || imageUrl.isEmpty()) {
+                return;
+            }
+
+            RequestCreator creator = Picasso.with(getContext()).load(imageUrl);
+
+            Target target = new Target() {
+                @Override
+                public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom from) {
+                    mPreview.setImageBitmap(bitmap);
+                }
+
+                public void onBitmapFailed(Drawable errorDrawable) {
+                }
+
+                public void onPrepareLoad(Drawable placeHolderDrawable) {
+                }
+            };
+            creator.into(target);
+        }
+    }
+
+    /**
+     *
+     */
+    public void updateStream(Bundle newArgs) {
+        if (newArgs != null) {
+            mChannelInfo = newArgs.getParcelable(getString(R.string.stream_fragment_streamerInfo));
+            vodId = newArgs.getString(getString(R.string.stream_fragment_vod_id));
+            vodLength = newArgs.getInt(getString(R.string.stream_fragment_vod_length));
+            autoPlay = newArgs.getBoolean(getString(R.string.stream_fragment_autoplay));
+
+            settings.setVodLength(vodId, vodLength);
+        }
+
+        /* Reset Stream Urls */
+        qualityURLs = null;
+
+        mVideoView.stopPlayback();
+
+        setupToolbar();
+        updateViewerCount(newArgs);
+        setupSpinner();
+        setupProfileBottomSheet();
+        setupLandscapeChat();
+        setupShowChatButton();
+
+
+        if (autoPlay || vodId != null) {
+            startStreamWithQuality(settings.getPrefStreamQuality());
+        }
+    }
 }
+
+

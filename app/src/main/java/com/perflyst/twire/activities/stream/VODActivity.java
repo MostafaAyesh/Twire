@@ -1,9 +1,13 @@
 package com.perflyst.twire.activities.stream;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+
+import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -85,5 +89,24 @@ public class VODActivity extends StreamActivity {
 	@Override
 	public View getMainContentLayout() {
 		return findViewById(R.id.main_content);
+	}
+
+	/* TODO: Implement PiP for VODs*/
+
+	@TargetApi(Build.VERSION_CODES.O)
+	public void setupPictureInPicture() {
+		return;
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onUserLeaveHint() {
+		return;
+	}
+
+	@Override
+	@TargetApi(Build.VERSION_CODES.O)
+	public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration config) {
+		return;
 	}
 }

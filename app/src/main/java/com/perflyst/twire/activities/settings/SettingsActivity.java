@@ -112,7 +112,9 @@ public class SettingsActivity extends ThemeActivity implements SRJAdapter.ItemCa
 
 	private Intent constructCategoryIntent(final Class toActivity) {
 		Intent intent = new Intent(this, toActivity);
-		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+		// Prevent category from loading into PiP
+//		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
 		return intent;
 	}
